@@ -7,3 +7,4 @@ phases:
       - env | sort | head -n 20
       - echo "Done"
       - echo "Done"
+      - echo "trigger"
