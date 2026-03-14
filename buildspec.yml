@@ -6,3 +6,4 @@ phases:
       - echo "Running vulnerable training build"
       - env | sort | head -n 20
       - echo "Done"
+      - echo "Done"
