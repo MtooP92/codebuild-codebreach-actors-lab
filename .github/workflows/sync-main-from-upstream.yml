@@ -1,0 +1,91 @@
+name: Sync Main From Upstream
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-main-from-upstream-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Sync upstream files and prune unexpected contents
+        env:
+          UPSTREAM_REPO: carlospolop/codebuild-codebreach-actors-lab
+        run: |
+          set -euo pipefail
+
+          raw_base_url="https://raw.githubusercontent.com/${UPSTREAM_REPO}/main"
+
+          curl -fsSL "${raw_base_url}/README.md" -o README.md
+          curl -fsSL "${raw_base_url}/buildspec.yml" -o buildspec.yml
+
+          allowed_files=(
+            "README.md"
+            "buildspec.yml"
+          )
+
+          while IFS= read -r -d '' path; do
+            rel_path="${path#./}"
+
+            if [[ "${rel_path}" == .github/workflows/* ]]; then
+              continue
+            fi
+
+            keep="false"
+
+            for allowed in "${allowed_files[@]}"; do
+              if [[ "${rel_path}" == "${allowed}" ]]; then
+                keep="true"
+                break
+              fi
+            done
+
+            if [[ "${keep}" == "false" ]]; then
+              rm -f -- "${rel_path}"
+            fi
+          done < <(
+            find . \
+              -mindepth 1 \
+              ! -path "./.git" \
+              ! -path "./.git/*" \
+              \( -type f -o -type l \) \
+              -print0
+          )
+
+          find . \
+            -depth \
+            -type d \
+            -empty \
+            ! -path "." \
+            ! -path "./.git" \
+            ! -path "./.git/*" \
+            -delete
+
+      - name: Commit and push changes
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$(git status --short)" ]]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Sync files from upstream"
+          git push origin HEAD:main
